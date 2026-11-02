@@ -272,21 +272,29 @@ def _build_document_from_payload(payload: Any) -> ExtractedDocument:
     return doc
 
 
+from monitoring.logger import get_correlation_id, set_correlation_id, log_event
+from monitoring.telemetry import WorkflowMetricsTracker
+
+
 @app.invoke_handler
 async def handle_invocation(request: Request) -> Response:
     """
     Handle POST /invocations requests from Azure Logic Apps or standard HTTP callers.
     """
+    raw_cid = request.headers.get("x-correlation-id") or request.headers.get("x-request-id")
+    cid = set_correlation_id(raw_cid)
+
     try:
         data = await request.json()
     except Exception as exc:
         logger.error("[INVOCATION_PAYLOAD_ERR] Invalid JSON: %s", exc)
         return JSONResponse(
             status_code=400,
-            content={"status": "ERROR", "error": f"Invalid JSON payload: {str(exc)}"},
+            content={"status": "ERROR", "error": f"Invalid JSON payload: {str(exc)}", "correlation_id": cid},
+            headers={"x-correlation-id": cid},
         )
 
-    logger.info("[INVOCATION_RECEIVED] Invocations request received. Processing through MAF Orchestrator...")
+    logger.info("[INVOCATION_RECEIVED] Invocations request received (cid=%s). Processing through MAF Orchestrator...", cid)
     doc = _build_document_from_payload(data)
 
     orchestrator = get_orchestrator()
@@ -297,6 +305,7 @@ async def handle_invocation(request: Request) -> Response:
         ]
         response_dict = {
             "status": "SUCCESS",
+            "correlation_id": cid,
             "document_id": result.document_id,
             "source_filename": result.source_filename,
             "document_type": result.document_type.value,
@@ -314,12 +323,13 @@ async def handle_invocation(request: Request) -> Response:
             "errors": result.errors,
             "history": result.history,
         }
-        return JSONResponse(status_code=200, content=response_dict)
+        return JSONResponse(status_code=200, content=response_dict, headers={"x-correlation-id": cid})
     except Exception as exc:
-        logger.error("[INVOCATION_EXEC_ERR] Workflow execution failed: %s", exc, exc_info=True)
+        logger.error("[INVOCATION_EXEC_ERR] Workflow execution failed (cid=%s): %s", cid, exc, exc_info=True)
         return JSONResponse(
             status_code=500,
-            content={"status": "FAILED", "document_id": doc.document_id, "error": str(exc)},
+            content={"status": "FAILED", "correlation_id": cid, "document_id": doc.document_id, "error": str(exc)},
+            headers={"x-correlation-id": cid},
         )
 
 
@@ -333,38 +343,47 @@ async def handle_response(
     """
     Handle POST /responses requests under OpenAI/Foundry conversational streaming protocol.
     """
+    cid = set_correlation_id(getattr(context, "response_id", None))
     stream = ResponseEventStream(response_id=context.response_id, request=request)
     yield stream.emit_created()
     yield stream.emit_in_progress()
 
-    input_text = getattr(request, "input", "")
-    if isinstance(input_text, list):
-        # Extract content from message list if formatted as chat history
-        parts = []
-        for msg in input_text:
-            content = getattr(msg, "content", "")
-            if isinstance(content, str):
-                parts.append(content)
-        input_text = "\n".join(parts)
+    try:
+        input_text = getattr(request, "input", "")
+        if isinstance(input_text, list):
+            # Extract content from message list if formatted as chat history
+            parts = []
+            for msg in input_text:
+                content = getattr(msg, "content", "")
+                if isinstance(content, str):
+                    parts.append(content)
+            input_text = "\n".join(parts)
 
-    payload = {"extracted_text": str(input_text)}
-    doc = _build_document_from_payload(payload)
+        payload = {"extracted_text": str(input_text)}
+        doc = _build_document_from_payload(payload)
 
-    orchestrator = get_orchestrator()
-    result = await orchestrator.execute_async(doc)
+        orchestrator = get_orchestrator()
+        result = await orchestrator.execute_async(doc)
 
-    summary = (
-        f"Document ID: {result.document_id}\n"
-        f"Classification: {result.document_type.value}\n"
-        f"Route: {result.route_to}\n"
-        f"Workflow Status: {result.workflow_status.value}\n"
-        f"Extracted Fields: {json.dumps(result.extracted_fields, indent=2)}"
-    )
+        summary = (
+            f"Correlation ID: {cid}\n"
+            f"Document ID: {result.document_id}\n"
+            f"Classification: {result.document_type.value}\n"
+            f"Route: {result.route_to}\n"
+            f"Workflow Status: {result.workflow_status.value}\n"
+            f"Extracted Fields: {json.dumps(result.extracted_fields, indent=2)}"
+        )
 
-    async for event in stream.output_item_message(summary):
-        if cancellation_signal.is_set():
-            break
-        yield event
+        async for event in stream.output_item_message(summary):
+            if cancellation_signal.is_set():
+                break
+            yield event
+
+    except Exception as exc:
+        logger.error("[RESPONSE_STREAM_ERR] Conversational execution failed (cid=%s): %s", cid, exc, exc_info=True)
+        err_msg = f"Error during agent execution: {str(exc)} (Correlation ID: {cid})"
+        async for event in stream.output_item_message(err_msg):
+            yield event
 
     yield stream.emit_completed()
 

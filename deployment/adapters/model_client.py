@@ -241,6 +241,13 @@ class ModelClientManager:
             if response and hasattr(response, "text"):
                 return str(response.text)
         except Exception as exc:
+            err_str = str(exc)
+            is_auth_err = any(code in err_str.lower() for code in ["401", "403", "permissiondenied", "access denied", "authenticationerror", "invalid client secret", "unauthorized"])
+            from runtime_paths import is_hosted_agent_environment
+            if is_auth_err and (is_hosted_agent_environment() or os.getenv("ENVIRONMENT", "").lower() == "production"):
+                logger.critical("[PRODUCTION_AUTH_BLOCKED] Azure AI Model Authentication failed in production: %s", exc)
+                raise RuntimeError(f"Azure AI Model Authentication failed in production environment: {exc}") from exc
+
             logger.warning("[MODEL_CALL_NOTICE] Model call failed (%s). Falling back to local heuristic.", exc)
 
         return None
@@ -256,7 +263,7 @@ class ModelClientManager:
             deployment = (
                 os.getenv("AZURE_AI_MODEL_DEPLOYMENT_NAME")
                 or self.settings.azure_ai_model_deployment_name
-                or "gpt-4.1-mini"
+                or "gpt-4o"
             )
             raw_ep = _normalize_endpoint(endpoint)
             is_v1 = raw_ep.endswith("/openai/v1") or raw_ep.endswith("/v1")
@@ -266,7 +273,16 @@ class ModelClientManager:
                 client = OpenAI(base_url=raw_ep, api_key=key, timeout=25.0)
             else:
                 from openai import AzureOpenAI
-                client = AzureOpenAI(azure_endpoint=raw_ep.rstrip("/"), api_key=key, api_version=api_version, timeout=25.0)
+                auth_method = self.get_auth_method()
+                if key and auth_method == "api_key":
+                    client = AzureOpenAI(azure_endpoint=raw_ep.rstrip("/"), api_key=key, api_version=api_version, timeout=25.0)
+                else:
+                    from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+                    client_id = (os.getenv("AZURE_CLIENT_ID") or self.settings.azure_client_id or "").strip()
+                    cred = DefaultAzureCredential(managed_identity_client_id=client_id) if client_id else DefaultAzureCredential()
+                    token_provider = get_bearer_token_provider(cred, "https://cognitiveservices.azure.com/.default")
+                    client = AzureOpenAI(azure_endpoint=raw_ep.rstrip("/"), azure_ad_token_provider=token_provider, api_version=api_version, timeout=25.0)
+
             messages = []
             if system_prompt:
                 messages.append({"role": "system", "content": system_prompt})
@@ -280,6 +296,13 @@ class ModelClientManager:
             )
             return resp.choices[0].message.content or ""
         except Exception as exc:
+            err_str = str(exc)
+            is_auth_err = any(code in err_str.lower() for code in ["401", "403", "permissiondenied", "access denied", "authenticationerror", "invalid client secret", "unauthorized"])
+            from runtime_paths import is_hosted_agent_environment
+            if is_auth_err and (is_hosted_agent_environment() or os.getenv("ENVIRONMENT", "").lower() == "production"):
+                logger.critical("[PRODUCTION_AUTH_BLOCKED] Azure AI Model Authentication failed in production: %s", exc)
+                raise RuntimeError(f"Azure AI Model Authentication failed in production environment: {exc}") from exc
+
             logger.warning("[MODEL_SYNC_NOTICE] Synchronous model call failed (%s). Falling back to heuristic.", exc)
             return None
 
@@ -307,7 +330,15 @@ class ModelClientManager:
                 client = OpenAI(base_url=raw_ep, api_key=key, timeout=30.0)
             else:
                 from openai import AzureOpenAI
-                client = AzureOpenAI(azure_endpoint=raw_ep, api_key=key, api_version=api_version, timeout=30.0)
+                auth_method = self.get_auth_method()
+                if key and auth_method == "api_key":
+                    client = AzureOpenAI(azure_endpoint=raw_ep, api_key=key, api_version=api_version, timeout=30.0)
+                else:
+                    from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+                    client_id = (os.getenv("AZURE_CLIENT_ID") or self.settings.azure_client_id or "").strip()
+                    cred = DefaultAzureCredential(managed_identity_client_id=client_id) if client_id else DefaultAzureCredential()
+                    token_provider = get_bearer_token_provider(cred, "https://cognitiveservices.azure.com/.default")
+                    client = AzureOpenAI(azure_endpoint=raw_ep, azure_ad_token_provider=token_provider, api_version=api_version, timeout=30.0)
 
             b64_img = base64.b64encode(image_bytes).decode("utf-8")
 
@@ -326,6 +357,13 @@ class ModelClientManager:
             )
             return resp.choices[0].message.content or ""
         except Exception as exc:
+            err_str = str(exc)
+            is_auth_err = any(code in err_str.lower() for code in ["401", "403", "permissiondenied", "access denied", "authenticationerror", "invalid client secret", "unauthorized"])
+            from runtime_paths import is_hosted_agent_environment
+            if is_auth_err and (is_hosted_agent_environment() or os.getenv("ENVIRONMENT", "").lower() == "production"):
+                logger.critical("[PRODUCTION_AUTH_BLOCKED] Azure AI Vision Authentication failed in production: %s", exc)
+                raise RuntimeError(f"Azure AI Vision Authentication failed in production environment: {exc}") from exc
+
             logger.warning("[MODEL_VISION_NOTICE] Vision model call failed (%s). Falling back to heuristic.", exc)
             return None
 

@@ -102,7 +102,7 @@ class HITLAgent(Executor):
         state.setdefault("history", []).append({
             "agent": "HITLAgent",
             "action": "REVIEW_PACKAGE_SAVED",
-            "review_file": f"output/reviews/{doc_id}_review.json",
+            "review_file": str(self.json_store.settings.output_reviews_dir / f"{doc_id}_review.json"),
             "notification_mode": notification_res.get("mode"),
         })
 

@@ -141,13 +141,19 @@ class OCRService:
             except ImportError:
                 # Direct subprocess fallback using CLI if pytesseract library is missing
                 if tesseract_bin:
-                    temp_img_path = self.settings.output_dir / "_temp_ocr.png"
-                    image.save(temp_img_path, format="PNG")
-                    cmd = [tesseract_bin, str(temp_img_path), "stdout", "--oem", "1", "-l", "eng"]
-                    proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
-                    if temp_img_path.exists():
-                        temp_img_path.unlink()
-                    return True, proc.stdout.strip(), None
+                    self.settings.temp_dir.mkdir(parents=True, exist_ok=True)
+                    temp_img_path = self.settings.temp_dir / f"_temp_ocr_{os.getpid()}_{os.urandom(4).hex()}.png"
+                    try:
+                        image.save(temp_img_path, format="PNG")
+                        cmd = [tesseract_bin, str(temp_img_path), "stdout", "--oem", "1", "-l", "eng"]
+                        proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                        return True, proc.stdout.strip(), None
+                    finally:
+                        if temp_img_path.exists():
+                            try:
+                                temp_img_path.unlink()
+                            except OSError:
+                                pass
 
         except Exception as exc:
             err_msg = f"OCR execution failed on image: {exc}"

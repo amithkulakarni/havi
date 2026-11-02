@@ -66,7 +66,11 @@ def _build_credential():
         if os.environ.get(k) == "":
             del os.environ[k]
 
-    logger.info("Foundry Project Auth: DefaultAzureCredential (az cli / managed identity)")
+    if client_id and not client_secret:
+        logger.info("Foundry Project Auth: DefaultAzureCredential (User-Assigned Managed Identity client_id=%s)", client_id)
+        return DefaultAzureCredential(managed_identity_client_id=client_id)
+
+    logger.info("Foundry Project Auth: DefaultAzureCredential (az cli / System-Assigned Managed Identity)")
     return DefaultAzureCredential()
 
 

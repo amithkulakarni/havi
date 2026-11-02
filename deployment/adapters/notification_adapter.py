@@ -19,17 +19,27 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from config import Settings, get_settings
+
 logger = logging.getLogger("havi.adapters.notification")
 
 
 class HITLNotificationAdapter:
     """Pluggable notification client for HITL review alerts."""
 
-    def __init__(self) -> None:
+    def __init__(self, settings: Optional[Settings] = None) -> None:
+        self.settings = settings or get_settings()
         self.api_url = os.environ.get("HITL_NOTIFICATION_API_URL", "").strip()
         self.api_key = os.environ.get("HITL_NOTIFICATION_API_KEY", "").strip()
-        self.notifications_dir = Path("output/notifications")
-        self.notifications_dir.mkdir(parents=True, exist_ok=True)
+        self.notifications_dir = self.settings.output_notifications_dir
+        try:
+            self.notifications_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            logger.warning(
+                "[NOTIFICATION_DIR_WARN] Could not ensure notifications directory %s: %s",
+                self.notifications_dir,
+                exc,
+            )
 
     @property
     def is_live(self) -> bool:
@@ -93,13 +103,14 @@ class HITLNotificationAdapter:
                 }
 
         # 2. DUMMY / SIMULATION MODE
-        # Save outgoing payload to output/notifications/ for inspection
+        # Save outgoing payload to notifications directory for inspection
         alert_file = self.notifications_dir / f"{document_id}_alert.json"
         try:
+            self.notifications_dir.mkdir(parents=True, exist_ok=True)
             with open(alert_file, "w", encoding="utf-8") as f:
                 json.dump(payload, f, indent=2)
         except OSError as e:
-            logger.warning("Could not write notification file: %s", e)
+            logger.warning("[NOTIFICATION_WRITE_WARN] Could not write notification file %s: %s", alert_file, e)
 
         logger.info(
             "[DUMMY_NOTIFICATION_SENT] Simulated HITL alert successfully generated for doc '%s' (saved to %s).",

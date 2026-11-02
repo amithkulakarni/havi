@@ -138,7 +138,8 @@ def _build_document_from_payload(payload: Any) -> ExtractedDocument:
                         ext = ".pdf"
 
             if b64_content:
-                with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp_file:
+                settings.temp_dir.mkdir(parents=True, exist_ok=True)
+                with tempfile.NamedTemporaryFile(dir=str(settings.temp_dir), suffix=ext, delete=False) as tmp_file:
                     tmp_file.write(file_bytes)
                     tmp_path = tmp_file.name
 
@@ -170,7 +171,8 @@ def _build_document_from_payload(payload: Any) -> ExtractedDocument:
     if file_url and isinstance(file_url, str):
         import urllib.request
         ext = Path(filename).suffix.lower() or ".pdf"
-        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp_file:
+        settings.temp_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=str(settings.temp_dir), suffix=ext, delete=False) as tmp_file:
             req = urllib.request.Request(file_url, headers={"User-Agent": "HaviFreightAgent/1.0"})
             with urllib.request.urlopen(req, timeout=30) as response:
                 tmp_file.write(response.read())
@@ -369,25 +371,53 @@ async def handle_response(
 
 async def root_endpoint(request: Request) -> Response:
     """Root health and discovery endpoint for Azure App Service."""
+    settings = get_settings()
     return JSONResponse(
         content={
             "service": "HAVI MCD MAF Hosted Agent Server",
             "status": "HEALTHY",
-            "version": "1.0.0",
-            "endpoints": ["/invocations", "/responses", "/health", "/readiness"],
+            "version": settings.app_version,
+            "runtime_root": str(settings.runtime_root),
+            "endpoints": ["/invocations", "/responses", "/health", "/readiness", "/status"],
         }
     )
 
 
 async def health_endpoint(request: Request) -> Response:
     """Health probe endpoint."""
-    return JSONResponse(content={"status": "UP", "service": "havi-mcd-hosted-agent"})
+    settings = get_settings()
+    return JSONResponse(
+        content={
+            "status": "UP",
+            "service": "havi-mcd-hosted-agent",
+            "version": settings.app_version,
+            "runtime_root": str(settings.runtime_root),
+        }
+    )
+
+
+async def status_endpoint(request: Request) -> Response:
+    """Detailed operational status endpoint."""
+    settings = get_settings()
+    return JSONResponse(
+        content={
+            "status": "OPERATIONAL",
+            "service": "havi-mcd-hosted-agent",
+            "version": settings.app_version,
+            "runtime_root": str(settings.runtime_root),
+            "output_dir": str(settings.output_dir),
+            "temp_dir": str(settings.temp_dir),
+            "auth_method": settings.azure_auth_method,
+            "model_deployment": settings.azure_ai_model_deployment_name,
+        }
+    )
 
 
 app.add_route("/", root_endpoint, methods=["GET"])
 app.add_route("/health", health_endpoint, methods=["GET"])
 app.add_route("/healthz", health_endpoint, methods=["GET"])
 app.add_route("/readiness", health_endpoint, methods=["GET"])
+app.add_route("/status", status_endpoint, methods=["GET"])
 
 
 def serve(port: int = 8080, host: str = "0.0.0.0") -> None:

@@ -5,7 +5,8 @@ FROM python:3.11-slim
 # Prevent Python from writing .pyc files and enable unbuffered logging
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PORT=8088
+    PORT=8088 \
+    RUNTIME_ROOT=/tmp/havi_mcd
 
 # Install system dependencies (Poppler for PDF rendering, curl for health probes)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -25,8 +26,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy application source code
 COPY . .
 
-# Ensure storage directories exist
-RUN mkdir -p output/results output/payloads output/reviews output/logs
+# Ensure storage directories exist in both workspace and /tmp/havi_mcd with non-privileged user permissions
+RUN mkdir -p output/results output/payloads output/reviews output/logs output/notifications temp uploads data && \
+    mkdir -p /tmp/havi_mcd/output/results /tmp/havi_mcd/output/payloads /tmp/havi_mcd/output/reviews /tmp/havi_mcd/output/logs /tmp/havi_mcd/output/notifications /tmp/havi_mcd/temp /tmp/havi_mcd/uploads /tmp/havi_mcd/data && \
+    chmod -R 777 /tmp/havi_mcd
 
 # Run as non-privileged security user
 RUN useradd -m -u 1000 appuser && \

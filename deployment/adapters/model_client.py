@@ -149,16 +149,16 @@ class ModelClientManager:
                 return self._client
 
             # ==============================================================
-            # BRANCH 2: Service Principal / Entra ID Mode
+            # BRANCH 2: Service Principal / Entra ID / Managed Identity Mode
             # ==============================================================
-            elif auth_method in ("service_principal", "entra_id"):
+            elif auth_method in ("service_principal", "entra_id", "managed_identity", "system_assigned", "user_assigned"):
                 from azure.identity import ClientSecretCredential, DefaultAzureCredential
 
-                tenant_id = os.getenv("AZURE_TENANT_ID") or self.settings.azure_tenant_id
-                client_id = os.getenv("AZURE_CLIENT_ID") or self.settings.azure_client_id
-                client_secret = os.getenv("AZURE_CLIENT_SECRET") or self.settings.azure_client_secret
+                tenant_id = (os.getenv("AZURE_TENANT_ID") or self.settings.azure_tenant_id or "").strip()
+                client_id = (os.getenv("AZURE_CLIENT_ID") or self.settings.azure_client_id or "").strip()
+                client_secret = (os.getenv("AZURE_CLIENT_SECRET") or self.settings.azure_client_secret or "").strip()
 
-                if tenant_id and client_id and client_secret:
+                if auth_method == "service_principal" or (tenant_id and client_id and client_secret and auth_method != "managed_identity"):
                     logger.info(
                         "[MODEL_CLIENT_AUTH] Using Automated Headless Service Principal (tenant: %s, client_id: %s, secret_configured=True)",
                         tenant_id,
@@ -169,8 +169,11 @@ class ModelClientManager:
                         client_id=client_id,
                         client_secret=client_secret,
                     )
+                elif client_id:
+                    logger.info("[MODEL_CLIENT_AUTH] Using DefaultAzureCredential with User-Assigned Managed Identity (client_id: %s)", client_id)
+                    credential = DefaultAzureCredential(managed_identity_client_id=client_id)
                 else:
-                    logger.info("[MODEL_CLIENT_AUTH] Using DefaultAzureCredential / Managed Identity")
+                    logger.info("[MODEL_CLIENT_AUTH] Using DefaultAzureCredential (System-Assigned Managed Identity / Environment)")
                     credential = DefaultAzureCredential()
 
                 foundry_endpoint = (

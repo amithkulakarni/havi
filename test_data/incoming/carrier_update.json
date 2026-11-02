@@ -1,0 +1,10 @@
+{
+  "document_type": "CARRIER_DOCUMENT",
+  "booking_id": "BKG-MAERSK-9901",
+  "carrier_name": "Maersk Line",
+  "vessel_or_flight": "MAERSK MC-KINNEY / VOY 102",
+  "container_number": "MSKU9988771",
+  "estimated_departure": "2026-10-18",
+  "estimated_arrival": "2026-10-25",
+  "related_order_reference": "PO-998877"
+}

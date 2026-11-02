@@ -1,0 +1,31 @@
+# Microsoft Agent Framework (MAF) & Azure AI Foundry Hosted Agent
+agent-framework-core==1.21.0
+agent-framework-foundry==1.14.1
+agent-framework-openai==1.16.0
+azure-ai-projects>=1.0.0b1
+azure-identity>=1.20.0
+
+# Document Extraction & Data Validation
+pydantic==2.12.2
+pydantic-settings==2.11.0
+pdfplumber==0.11.7
+pypdf==6.8.0
+pillow==11.3.0
+pytesseract>=0.3.10
+nest-asyncio>=1.6.0
+
+# Azure AI Agent Server (Official Hosted Agent Protocols: /invocations & /responses)
+azure-ai-agentserver-core==2.2.0
+azure-ai-agentserver-invocations==1.2.0
+azure-ai-agentserver-responses==2.3.0
+
+# Telemetry & Monitoring
+opentelemetry-sdk>=1.25.0
+
+# Production ASGI / WSGI Server
+uvicorn>=0.30.0
+gunicorn>=22.0.0
+
+# Testing
+pytest==9.0.3
+pytest-asyncio==1.3.0

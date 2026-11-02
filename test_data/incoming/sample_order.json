@@ -1,0 +1,14 @@
+{
+  "document_type": "ORDER",
+  "customer_name": "HAVI MCD",
+  "po_number": "PO-100200",
+  "order_number": "ORD-554433",
+  "material": "Fresh Buns & Rolls",
+  "quantity": 1200,
+  "unit_of_measure": "Cases",
+  "pickup_location": "Bakery Logistics Center, Chicago IL",
+  "delivery_location": "McDonald's Distribution Hub, Oak Brook IL",
+  "requested_pickup_date": "2026-10-20",
+  "requested_delivery_date": "2026-10-22",
+  "incoterms": "DDP"
+}
